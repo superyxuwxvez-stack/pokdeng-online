@@ -2,15 +2,17 @@
 import {useEffect,useRef,useState} from 'react';
 import {getBrowserClient} from '../lib/supabase';
 import type {Session} from '@supabase/supabase-js';
+import Card from './components/PlayingCard';
 import {action,createRoom,points,view,natural} from '../lib/game.js';
 type Player={id:string;name:string;chips:number;cards:number[];bet:number;ready:boolean;done:boolean;result:number|null};
 type Room={code:string;host:string;banker:string;round:number;phase:string;players:Player[];deadline:number};
 const money=(n:number)=>n.toLocaleString('en-US');
-function Card({n,index=0}:{n:number;index?:number}){const rank=['A','2','3','4','5','6','7','8','9','10','J','Q','K'][n%13],suit=['♠','♥','♣','♦'][Math.floor(n/13)];return <div className={'card '+(n<0?'back':Math.floor(n/13)%2?'red':'')} style={{transform:'rotate('+((index-0.5)*8)+'deg)'}}>{n<0?<span>♠</span>:<><b>{rank}<small>{suit}</small></b><em>{suit}</em><b className="corner">{rank}<small>{suit}</small></b></>}</div>}
 export default function Home(){
  const [room,setRoom]=useState<Room|null>(null),[name,setName]=useState(''),[code,setCode]=useState(''),[bet,setBet]=useState(100),[busy,setBusy]=useState(false),[error,setError]=useState(''),[modal,setModal]=useState(''),[demo,setDemo]=useState(false),[now,setNow]=useState(Date.now()),[copied,setCopied]=useState(false);
  const [session,setSession]=useState<Session|null>(null),[authReady,setAuthReady]=useState(false),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[loginBusy,setLoginBusy]=useState(false),[loginError,setLoginError]=useState('');
  const [authMode,setAuthMode]=useState<'signin'|'signup'>('signin'),[confirmPassword,setConfirmPassword]=useState(''),[showPassword,setShowPassword]=useState(false),[authNotice,setAuthNotice]=useState('');
+ const [motionBusy,setMotionBusy]=useState(false),[revealBusy,setRevealBusy]=useState(false);
+ const tableBusy=motionBusy||revealBusy;
  const identity=useRef(''); const demoRoom=useRef<any>(null);
  const storageKey=()=> 'pok-room-'+identity.current;
  useEffect(()=>{
@@ -63,8 +65,18 @@ export default function Home(){
   const data=await res.json();if(!res.ok)throw new Error(data.error||'เชื่อมต่อไม่ได้');return data;
  }
  useEffect(()=>{if(!room)return;if(demo){const t=setInterval(()=>{if(demoRoom.current){action(demoRoom.current,identity.current,{type:'tick'});setRoom(view(demoRoom.current,identity.current));}},1000);return()=>clearInterval(t)}let stopped=false;const poll=async()=>{try{const r=await request('state');if(!stopped){setRoom(r);setError('')}}catch(e:any){if(!stopped)setError('การเชื่อมต่อขัดข้อง • '+e.message)}};const t=setInterval(poll,2000);return()=>{stopped=true;clearInterval(t)}},[room?.code,demo]);
+ useEffect(()=>{
+  if(!room||room.round<1||room.phase==='waiting'){setMotionBusy(false);return;}
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  setMotionBusy(true);const timer=setTimeout(()=>setMotionBusy(false),room.players.length*280+1250);return()=>clearTimeout(timer);
+ },[room?.code,room?.round]);
+ useEffect(()=>{
+  if(room?.phase!=='result'){setRevealBusy(false);return;}
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  setRevealBusy(true);const timer=setTimeout(()=>setRevealBusy(false),room.players.length*180+900);return()=>clearTimeout(timer);
+ },[room?.phase,room?.code,room?.round]);
  async function run(type:string){
-  if(busy)return;setBusy(true);setError('');
+  if(busy||tableBusy)return;setBusy(true);setError('');
   try{
    if((type==='create'||type==='join')&&!name.trim())throw new Error('ใส่ชื่อเล่นก่อนนะ');
    let r;
@@ -90,11 +102,13 @@ export default function Home(){
  <div className="heading"><div><h1>{room?'โต๊ะของพวกเรา':'ค่ำคืนนี้… เปิดโต๊ะกัน'}</h1><p>{room?(demo?'โหมดทดลอง • เล่นกับบอตบนเครื่องนี้': 'ห้องส่วนตัว • รหัส '+room.code+' • '+room.players.length+'/6 คน'):'ชวนเพื่อนคนโปรด มาลุ้นไพ่ใบถัดไปด้วยกัน'}</p></div><button className="outline small" onClick={()=>setModal('rules')}>♧ กติกาโต๊ะ</button></div>
  <div className="game-layout"><section className="table-panel">
  <div className="table-toolbar"><span><i className="live-dot"/>{room?(demo?'โต๊ะทดลอง':'ห้อง '+room.code):'EMERALD PRIVATE TABLE'}</span><span>{room?'รอบที่ '+room.round:'2–6 PLAYERS'} <b>•</b> {room?.phase==='playing'?Math.max(0,Math.ceil((room.deadline-now)/1000))+' วินาที':'ป๊อกเด้ง'}</span></div>
- <div className="table-scene">
+ <div className={"table-scene cinematic-table "+(motionBusy?"is-dealing ":"")+(room?.phase==="result"&&!tableBusy?"is-settled":"")}>
+ <div className="table-atmosphere" aria-hidden="true"><i/><i/><i/></div>
+ {room&&<div className={'dealer-shoe '+(motionBusy?'shuffling':'')} aria-hidden="true"><span/><span/><span/><span className="shoe-top">♠<small>EMERALD</small></span><div className="deck-caption">{motionBusy?'กำลังแจกไพ่':'สำรับไพ่'}</div></div>}
  <div className="table-rim"><div className="felt"><div className="felt-ring"/><div className="table-mark"><span>♠</span><h2>EMERALD</h2><p>P O K D E N G &nbsp; C L U B</p><div>PRIVATE TABLE · GOOD COMPANY</div></div></div></div>
  {!room&&<><div className="seat preview-seat top"><span className="avatar">♛</span><small>ที่นั่งเจ้ามือ</small></div><div className="preview-cards"><Card n={8}/><Card n={22} index={1}/><div className="nine">ป๊อก 9 <span>✦</span></div></div><div className="seat empty-seat left">+<small>รอเพื่อนเข้าร่วม</small></div><div className="seat empty-seat right">+<small>รอเพื่อนเข้าร่วม</small></div><div className="decor-chips"><i/><i/><i/></div></>}
- {ordered.map((p,i)=>{const self=p.id===identity.current;const others=ordered.length-1;const x=self?50:others===1?50:others===2?30+i*40:15+i*70/Math.max(1,others-1);return <div key={p.id} className={'player-seat '+(self?'self':'opponent')} style={{left:x+'%',top:self?'77%':i%2===1&&others>3?'40%':'12%'}}><div className={'avatar '+(p.id===room?.banker?'bank-avatar':'')}>{p.id===room?.banker?'♛':p.name.slice(0,1)}</div><div className="player-label">{p.name}{self?' (คุณ)':''}<small>{p.id===room?.banker?'เจ้ามือ • ':''}{money(p.chips)}</small></div><div className="hand">{p.cards.map((n,j)=><Card key={j} n={n} index={j}/>)}</div>{p.cards.length>0&&p.cards[0]>=0&&<span className="score">{natural(p.cards)?'ป๊อก ':''}{points(p.cards)} แต้ม</span>}{room?.phase==='waiting'&&<span className={'status '+(p.ready?'ready':'')}>{p.ready?'✓ พร้อมแล้ว':'กำลังเตรียมตัว'}</span>}{room?.phase==='playing'&&p.done&&p.id!==room.banker&&<span className="status ready">หยุดแล้ว</span>}{room?.phase==='result'&&<span className={'result '+((p.result||0)>0?'win':'')}>{p.result===0?'เสมอ':(p.result!>0?'+':'')+money(p.result||0)}</span>}</div>})}
- {room&&<div className="center-status">{room.phase==='waiting'?'รอทุกคนพร้อม':room.phase==='playing'?'ลุ้นไพ่ใบถัดไป':'เปิดไพ่ • สรุปผลรอบนี้'}</div>}
+ {ordered.map((p,i)=>{const self=p.id===identity.current;const others=ordered.length-1;const x=self?50:others===1?50:others===2?30+i*40:15+i*70/Math.max(1,others-1);return <div key={p.id} className={'player-seat '+(self?'self':'opponent')+(room?.phase==='result'&&!tableBusy&&(p.result||0)>0?' winning-seat':'')} style={{left:x+'%',top:self?'77%':others>3?(i===0||i===others-1?'38%':'8%'):'12%'}}><div className={'avatar '+(p.id===room?.banker?'bank-avatar':'')}>{p.id===room?.banker?'♛':p.name.slice(0,1)}</div><div className="player-label">{p.name}{self?' (คุณ)':''}<small>{p.id===room?.banker?'เจ้ามือ • ':''}{money(p.chips)}</small></div><div className="hand">{p.cards.map((n,j)=><Card key={room!.code+'-'+room!.round+'-'+p.id+'-'+j} n={n} index={j} animated delay={j<2?(j*ordered.length+room!.players.findIndex(q=>q.id===p.id))*140:0} revealDelay={i*180+j*90}/>)}</div>{!tableBusy&&p.cards.length>0&&p.cards[0]>=0&&<span className="score">{natural(p.cards)?'ป๊อก ':''}{points(p.cards)} แต้ม</span>}{room?.phase==='waiting'&&<span className={'status '+(p.ready?'ready':'')}>{p.ready?'✓ พร้อมแล้ว':'กำลังเตรียมตัว'}</span>}{room?.phase==='playing'&&p.done&&p.id!==room.banker&&<span className="status ready">หยุดแล้ว</span>}{room?.phase==='result'&&!tableBusy&&<span key={room.round+'-'+p.id+'-result'} className={'result '+((p.result||0)>0?'win':'')}>{p.result===0?'เสมอ':(p.result!>0?'+':'')+money(p.result||0)}</span>}</div>})}
+ {room&&<div className="center-status" aria-live="polite">{motionBusy?'กำลังแจกไพ่ทีละใบ…':revealBusy?'กำลังเปิดไพ่…':room.phase==='waiting'?'รอทุกคนพร้อม':room.phase==='playing'?'ลุ้นไพ่ใบถัดไป':'เปิดไพ่ • สรุปผลรอบนี้'}</div>}
  </div>
  <div className="table-bottom"><span>♢ ชิปสมมติเท่านั้น</span><span>ไม่มีเงินจริง · ไม่มีการเติมหรือถอน</span></div>
  </section>
@@ -103,8 +117,8 @@ export default function Home(){
  {!room?<><label htmlFor="name">ชื่อเล่นของคุณ</label><input id="name" maxLength={20} placeholder="เพื่อนเรียกคุณว่าอะไร?" value={name} onChange={e=>setName(e.target.value)}/><button className="gold" disabled={busy} onClick={()=>run('create')}>{busy?'กำลังเชื่อมต่อ…':'♠  สร้างห้องส่วนตัว'}<span>↗</span></button><div className="or"><span/>หรือเข้าร่วมกับเพื่อน<span/></div><label htmlFor="code">รหัสห้อง</label><div className="join-row"><input id="code" placeholder="รหัส 6 ตัว" maxLength={6} value={code} onChange={e=>setCode(e.target.value.toUpperCase())}/><button className="outline" disabled={busy} onClick={()=>run('join')}>เข้าร่วม →</button></div><button className="text-button" onClick={startDemo}>ลองเล่นกับบอตก่อน ↗</button></>:<>
  <div className="room-code"><small>{demo?'โหมดทดลอง':'รหัสชวนเพื่อน'}</small><strong>{room.code}</strong><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(location.origin+'/?room='+room.code);setCopied(true);setTimeout(()=>setCopied(false),2000)}catch{setError('คัดลอกไม่สำเร็จ ใช้รหัสห้อง '+room.code)}}}>{copied?'✓ คัดลอกแล้ว':'คัดลอกลิงก์ ↗'}</button></div>
  {room.phase==='waiting'&&<><label>{banker?'คุณเป็นเจ้ามือรอบนี้':'เลือกชิปสำหรับรอบนี้'}</label>{!banker&&<div className="bet-options">{[100,200,500,1000].map(n=><button key={n} className={bet===n?'selected':''} disabled={me?.ready} onClick={()=>setBet(n)}>{money(n)}</button>)}</div>}<button className="gold" disabled={busy||me?.ready} onClick={()=>run('ready')}>{me?.ready?'✓ คุณพร้อมแล้ว':'พร้อมเล่น'} <span>♧</span></button>{host&&<button className="outline full" disabled={busy||room.players.length<2||!room.players.every(p=>p.ready)} onClick={()=>run('deal')}>แจกไพ่ • เริ่มรอบ</button>}<p className="hint">{room.players.length<2?'ส่งรหัสให้เพื่อนอย่างน้อย 1 คน':host?'แจกไพ่ได้เมื่อทุกคนกดพร้อม':'รอเจ้าของห้องแจกไพ่'}</p></>}
- {room.phase==='playing'&&<><div className="turn-status">{banker?'รอผู้เล่นตัดสินใจ':me?.done?'คุณหยุดแล้ว รอเปิดไพ่':'จั่วอีกใบ หรือพอแค่นี้?'}</div><button className="gold" disabled={busy||banker||me?.done} onClick={()=>run('draw')}>จั่วไพ่ <span>＋</span></button><button className="outline full" disabled={busy||banker||me?.done} onClick={()=>run('stand')}>อยู่ • ไม่จั่วเพิ่ม</button><p className="hint">เหลือ {Math.max(0,Math.ceil((room.deadline-now)/1000))} วินาที • หมดเวลา = อยู่</p></>}
- {room.phase==='result'&&<><div className="round-result">{(me?.result||0)>0?'ไพ่เข้าทางคุณ ✦':me?.result===0?'รอบนี้เสมอ':'ลุ้นกันใหม่รอบหน้า'}<strong>{(me?.result||0)>0?'+':''}{money(me?.result||0)}<small> ชิป</small></strong></div>{host?<button className="gold" disabled={busy} onClick={()=>run('next')}>รอบถัดไป <span>→</span></button>:<p className="hint">รอเจ้าของห้องเปิดรอบถัดไป</p>}</>}
+ {room.phase==='playing'&&<><div className="turn-status">{motionBusy?'กำลังแจกไพ่…':banker?'รอผู้เล่นตัดสินใจ':me?.done?'คุณหยุดแล้ว รอเปิดไพ่':'จั่วอีกใบ หรือพอแค่นี้?'}</div><button className="gold" disabled={busy||tableBusy||banker||me?.done} onClick={()=>run('draw')}>จั่วไพ่ <span>＋</span></button><button className="outline full" disabled={busy||tableBusy||banker||me?.done} onClick={()=>run('stand')}>อยู่ • ไม่จั่วเพิ่ม</button><p className="hint">เหลือ {Math.max(0,Math.ceil((room.deadline-now)/1000))} วินาที • หมดเวลา = อยู่</p></>}
+ {room.phase==='result'&&<><div className={'round-result '+(tableBusy?'result-pending':'')}>{(me?.result||0)>0?'ไพ่เข้าทางคุณ ✦':me?.result===0?'รอบนี้เสมอ':'ลุ้นกันใหม่รอบหน้า'}<strong>{(me?.result||0)>0?'+':''}{money(me?.result||0)}<small> ชิป</small></strong></div>{host?<button className="gold" disabled={busy||tableBusy} onClick={()=>run('next')}>รอบถัดไป <span>→</span></button>:<p className="hint">รอเจ้าของห้องเปิดรอบถัดไป</p>}</>}
  <button className="text-button" disabled={busy||room.phase==='playing'} onClick={()=>run('leave')}>ออกจากโต๊ะ</button>
  </>}
  {error&&<div role="alert" className="error">{error}</div>}
