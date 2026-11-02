@@ -7,7 +7,7 @@ Next.js + Supabase • ชื่อผู้ใช้/รหัสผ่าน �
 3. คัดลอก Project URL, anon/public key และ service_role key
 4. Authentication > Providers: เปิด Email/password
 5. Authentication > Sign In / User Signups: ปิด Allow new users to sign up
-   คุณเป็นผู้สร้างบัญชีให้เพื่อนเท่านั้น ไม่ต้องเปิดสมัครสมาชิกสาธารณะ
+   หน้าเว็บสมัครผ่าน API ของเกมโดยเฉพาะ ไม่เปิด signup ตรงของ Supabase
 6. สร้างไฟล์ .env.local โดยคัดลอกจาก .env.example แล้วใส่ค่าจริง
 
 ตัวแปร:
@@ -19,7 +19,11 @@ Next.js + Supabase • ชื่อผู้ใช้/รหัสผ่าน �
 ห้ามนำ .env.local หรือ service_role key ขึ้น GitHub
 อย่าเติม NEXT_PUBLIC_ หน้าตัวแปร service_role
 
-## 2. สร้างบัญชี
+## 2. สมัครสมาชิกและสร้างบัญชี
+รัน supabase/signup.sql ใน SQL Editor เพิ่มจาก schema.sql
+ผู้เล่นกด สมัครสมาชิก ที่หน้าเกม ใส่ชื่อผู้ใช้ a-z/0-9/_ 3–24 ตัว รหัสผ่าน 8–72 ตัว และยืนยันรหัสผ่าน จากนั้นเข้าสู่ระบบได้ทันที
+จำกัดการพยายามสมัคร 5 ครั้งต่อ IP ต่อชั่วโมง เก็บเฉพาะ HMAC ของ IP ฝั่งเซิร์ฟเวอร์ คีย์ service_role อยู่บน Vercel เท่านั้น
+เครื่องมือสร้างบัญชีด้วยมือยังใช้ได้ตามด้านล่าง:
 ติดตั้ง Node.js 22.13 ขึ้นไป แล้วรัน:
 npm ci
 node --env-file=.env.local scripts/create-player.mjs player01
@@ -31,7 +35,7 @@ node --env-file=.env.local scripts/create-player.mjs player01
 ตัวระบุดังกล่าวไม่ใช่อีเมลจริงและไม่มีการส่งเมล
 
 หากต้องเปลี่ยนรหัสผ่าน ให้เจ้าของเกมจัดการผ่าน Supabase Authentication
-รุ่นนี้ยังไม่มีเมนูลืมรหัสผ่านหรือสมัครบัญชีในหน้าเว็บ
+มีเมนูสมัครสมาชิกในหน้าเว็บแล้ว ใช้ username/password และยืนยันรหัสผ่าน ไม่ส่งอีเมล ยังไม่มีเมนูลืมรหัสผ่าน
 
 ## 3. ทดสอบบนเครื่อง
 npm run dev
@@ -97,3 +101,4 @@ A=1, 2–9 ตามหน้าไพ่, 10/J/Q/K=0 นับหลักห�
 https://vercel.com/docs/frameworks/full-stack/nextjs
 https://supabase.com/docs/reference/javascript/auth-signinwithpassword
 https://supabase.com/docs/reference/javascript/auth-admin-createuser
+
